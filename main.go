@@ -168,6 +168,12 @@ func main() {
 	isRecording = true
 	downloadFolderAbsPathChan <- downloadAbsolutePath
 
+	fmt.Print("Press Enter to stop recording...")
+	fmt.Scanln()
+
+	fmt.Println("Recording stopped")
+	isRecording = false
+
 	// ========================================
 	// 5. Wait for Shutdown
 	// ========================================
