@@ -23,11 +23,12 @@ const (
 	Bold   = "\033[1m"
 )
 
-// responseWorker listens to the responses channel and saves all .vtt files to disk.
+// responseWorker listens to the responses channel and saves files matching the specified extensions to disk.
 // It runs continuously until the channel is closed.
 func responseWorker(
 	responses <-chan playwright.Response,
 	downloadFolderAbsPathChan <-chan string,
+	fileExtensions []string,
 ) {
 	downloadFolderAbsPath := "."
 
@@ -40,7 +41,16 @@ func responseWorker(
 			}
 			responseUrl := response.URL()
 
-			if strings.HasSuffix(responseUrl, ".vtt") {
+			// Check if URL ends with any of the specified extensions
+			matchesExtension := false
+			for _, ext := range fileExtensions {
+				if strings.HasSuffix(responseUrl, ext) {
+					matchesExtension = true
+					break
+				}
+			}
+
+			if matchesExtension {
 				body, err := response.Text()
 				if err != nil {
 					fmt.Printf("%s✗ Error reading body: %v%s\n", Red, err, Reset)
@@ -86,8 +96,15 @@ func main() {
 	// ========================================
 	// 1. Parse CLI Input
 	// ========================================
-	url := flag.String("url", "", "URL to open")
+	url := flag.String("url", "", "URL to open in browser")
+	fileExtensionsStr := flag.String("file-extension", ".vtt", "Comma-separated list of file extensions to download (e.g., .vtt,.srt,.mp4)")
 	flag.Parse()
+
+	// Parse file extensions
+	fileExtensions := strings.Split(*fileExtensionsStr, ",")
+	for i := range fileExtensions {
+		fileExtensions[i] = strings.TrimSpace(fileExtensions[i])
+	}
 
 	// ========================================
 	// 2. Initialize Browser
@@ -109,16 +126,7 @@ func main() {
 	page, err := browser.NewPage(playwright.BrowserNewPageOptions{
 		Permissions: []string{"geolocation", "notifications"},
 		UserAgent:   playwright.String("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"),
-		Viewport: &playwright.Size{
-			Width:  1920,
-			Height: 1080,
-		},
-		Locale:     playwright.String("fi-FI"),
-		TimezoneId: playwright.String("Europe/Helsinki"),
-		Geolocation: &playwright.Geolocation{
-			Latitude:  60.1699,
-			Longitude: 24.9384,
-		},
+		Viewport:    nil,
 	})
 	defer page.Close()
 	if err != nil {
@@ -130,6 +138,7 @@ func main() {
 	}
 
 	fmt.Printf("%s%s✓ Browser opened successfully!%s Press Ctrl+C to exit...\n", Bold, Green, Reset)
+	fmt.Printf("%sMonitoring file extensions: %s%s%s\n", Cyan, Yellow, strings.Join(fileExtensions, ", "), Reset)
 
 	// ========================================
 	// 3. Start Workers and Handlers
@@ -141,7 +150,7 @@ func main() {
 	defer close(downloadFolderAbsPathChan)
 
 	// Start response worker
-	go responseWorker(browserResponseChan, downloadFolderAbsPathChan)
+	go responseWorker(browserResponseChan, downloadFolderAbsPathChan, fileExtensions)
 
 	// Send initial download folder path
 	// downloadFolderAbsPathChan <- downloadAbsolutePath
