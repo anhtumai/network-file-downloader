@@ -12,10 +12,16 @@ import (
 	"github.com/playwright-community/playwright-go"
 )
 
-type Event struct {
-	Type     string
-	FileName string
-}
+// ANSI color codes
+const (
+	Reset  = "\033[0m"
+	Red    = "\033[31m"
+	Green  = "\033[32m"
+	Yellow = "\033[33m"
+	Blue   = "\033[34m"
+	Cyan   = "\033[36m"
+	Bold   = "\033[1m"
+)
 
 // responseWorker listens to the responses channel and saves all .vtt files to disk.
 // It runs continuously until the channel is closed.
@@ -29,7 +35,7 @@ func responseWorker(
 		select {
 		case response, ok := <-responses:
 			if !ok {
-				fmt.Println("Response channel closed, worker exiting")
+				fmt.Printf("%s✓ Response channel closed, worker exiting%s\n", Cyan, Reset)
 				return
 			}
 			responseUrl := response.URL()
@@ -37,19 +43,19 @@ func responseWorker(
 			if strings.HasSuffix(responseUrl, ".vtt") {
 				body, err := response.Text()
 				if err != nil {
-					fmt.Printf("Error reading body: %v\n", err)
+					fmt.Printf("%s✗ Error reading body: %v%s\n", Red, err, Reset)
 					continue
 				}
 				fileName := path.Base(responseUrl)
 				filePath := fmt.Sprintf("%s/%s", downloadFolderAbsPath, fileName)
 				if err := os.WriteFile(filePath, []byte(body), 0644); err != nil {
-					fmt.Printf("Error writing file: %v\n", err)
+					fmt.Printf("%s✗ Error writing file %s: %v%s\n", Red, fileName, err, Reset)
 				}
 			}
 
 		case downloadFolderAbsPathValue, ok := <-downloadFolderAbsPathChan:
 			if !ok {
-				fmt.Println("Download folder channel closed, worker exiting")
+				fmt.Printf("%s✓ Download folder channel closed, worker exiting%s\n", Cyan, Reset)
 				return
 			}
 			downloadFolderAbsPath = downloadFolderAbsPathValue
@@ -57,6 +63,8 @@ func responseWorker(
 	}
 }
 
+// validateAndPrepareFolder converts a relative or absolute path to an absolute path
+// and validates that it exists and is a directory.
 func validateAndPrepareFolder(path string) (string, error) {
 	absPath, err := filepath.Abs(path)
 	if err != nil {
@@ -121,7 +129,7 @@ func main() {
 		log.Fatalf("could not visit this url: %v", err)
 	}
 
-	fmt.Println("Browser opened successfully! Press Ctrl+C to exit...")
+	fmt.Printf("%s%s✓ Browser opened successfully!%s Press Ctrl+C to exit...\n", Bold, Green, Reset)
 
 	// ========================================
 	// 3. Start Workers and Handlers
@@ -151,39 +159,39 @@ func main() {
 	// ========================================
 	for {
 
-		fmt.Print("Start Recording (y/n): ")
+		fmt.Printf("%s%sStart Recording (y/n):%s ", Bold, Yellow, Reset)
 		var startRecordingInput string
 		fmt.Scan(&startRecordingInput)
 
 		if startRecordingInput != "y" && startRecordingInput != "yes" {
-			fmt.Println("Recording cancelled")
+			fmt.Printf("%s⚠ Recording cancelled%s\n", Yellow, Reset)
 			return
 		}
 
 		var downloadAbsolutePath string
 		for {
-			fmt.Print("Input folder path to download to: ")
+			fmt.Printf("%s%sInput folder path to download to:%s ", Bold, Yellow, Reset)
 			var downloadFolderPathInput string
 			fmt.Scan(&downloadFolderPathInput)
 			downloadFolderPathInput = strings.TrimSpace(downloadFolderPathInput)
 
 			_downloadAbsolutePath, err := validateAndPrepareFolder(downloadFolderPathInput)
 			if err != nil {
-				log.Printf("Cannot open folder to download: %v\n", err)
+				fmt.Printf("%s✗ Cannot open folder: %v%s\n", Red, err, Reset)
 			} else {
 				downloadAbsolutePath = _downloadAbsolutePath
 				break
 			}
 		}
 
-		fmt.Printf("Recording started! Saving files to: %s\n", downloadAbsolutePath)
+		fmt.Printf("%s%s✓ Recording started!%s Saving files to: %s%s%s\n", Bold, Green, Reset, Cyan, downloadAbsolutePath, Reset)
 		isRecording = true
 		downloadFolderAbsPathChan <- downloadAbsolutePath
 
-		fmt.Print("Press Enter to stop recording...")
+		fmt.Printf("%s%sPress Enter to stop recording...%s ", Bold, Cyan, Reset)
 		fmt.Scanln()
 
-		fmt.Println("Recording stopped")
+		fmt.Printf("%s✓ Recording stopped%s\n", Green, Reset)
 		isRecording = false
 
 	}
