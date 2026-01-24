@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"path"
+	"path/filepath"
 	"strings"
 	"syscall"
 
@@ -20,24 +21,53 @@ type Event struct {
 
 // responseWorker listens to the responses channel and saves all .vtt files to disk.
 // It runs continuously until the channel is closed.
-func responseWorker(responses <-chan playwright.Response) {
+func responseWorker(
+	responses <-chan playwright.Response,
+	downloadFolderAbsPathChan <-chan string,
+) {
 	fmt.Println("Response worker started")
-	for response := range responses {
-		responseUrl := response.URL()
 
-		if strings.HasSuffix(responseUrl, ".vtt") {
-			// Update global state
-			body, err := response.Text()
-			if err != nil {
-				fmt.Printf("Error reading body: %v\n", err)
-				return
+	downloadFolderAbsPath := "."
+
+	for {
+		select {
+		case response := <-responses:
+			responseUrl := response.URL()
+
+			if strings.HasSuffix(responseUrl, ".vtt") {
+				// Update global state
+				body, err := response.Text()
+				if err != nil {
+					fmt.Printf("Error reading body: %v\n", err)
+					return
+				}
+				fileName := path.Base(responseUrl)
+				filePath := fmt.Sprintf("%s/%s", downloadFolderAbsPath, fileName)
+				os.WriteFile(filePath, []byte(body), 0644)
 			}
-			fileName := path.Base(responseUrl)
-			filePath := fmt.Sprintf("/tmp/vtt-files/%s", fileName)
-			os.WriteFile(filePath, []byte(body), 0644)
+
+		case downloadFolderAbsPathValue := <-downloadFolderAbsPathChan:
+			downloadFolderAbsPath = downloadFolderAbsPathValue
+
 		}
 	}
+}
 
+func validateAndPrepareFolder(path string) (string, error) {
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return "", fmt.Errorf("invalid path: %v", err)
+	}
+
+	info, err := os.Stat(absPath)
+	if os.IsNotExist(err) {
+		return "", fmt.Errorf("cannot access folder: %v", err)
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("path exists but is not a directory")
+	}
+
+	return absPath, nil
 }
 
 func main() {
@@ -87,16 +117,42 @@ func main() {
 	browserResponseChan := make(chan playwright.Response)
 	defer close(browserResponseChan)
 
-	// Main Thread Command line logic
-	// isRecording := false
+	downloadFolderAbsPathChan := make(chan string)
 
+	isRecording := false
+	// Main Thread Command line logic
+	fmt.Print("Start Recording (y/n): ")
+	var startRecordingInput string
+	fmt.Scan(&startRecordingInput)
+
+	if startRecordingInput == "y" || startRecordingInput == "yes" {
+		fmt.Println("Recording started!")
+		isRecording = true
+	} else {
+		fmt.Println("Recording cancelled")
+		os.Exit(0)
+	}
+
+	fmt.Print("Input folder path to download to: ")
+	var downloadFolderPathInput string
+
+	fmt.Scan(&downloadFolderPathInput)
+	downloadFolderPathInput = strings.TrimSpace(downloadFolderPathInput)
+
+	downloadAbsolutePath, err := validateAndPrepareFolder(downloadFolderPathInput)
+	if err != nil {
+		log.Fatalln("Cannot open folder to download: %v", err)
+		os.Exit(1)
+	}
+	downloadFolderAbsPathChan <- downloadAbsolutePath
 	//
 
-	go responseWorker(browserResponseChan)
+	go responseWorker(browserResponseChan, downloadFolderAbsPathChan)
 
 	page.OnResponse(func(response playwright.Response) {
-		// if isRecording is true
-		browserResponseChan <- response
+		if isRecording {
+			browserResponseChan <- response
+		}
 	})
 
 	if _, err = page.Goto(*url); err != nil {
