@@ -168,14 +168,20 @@ func main() {
 			os.Exit(0)
 		}
 
-		fmt.Print("Input folder path to download to: ")
-		var downloadFolderPathInput string
-		fmt.Scan(&downloadFolderPathInput)
-		downloadFolderPathInput = strings.TrimSpace(downloadFolderPathInput)
+		var downloadAbsolutePath string
+		for {
+			fmt.Print("Input folder path to download to: ")
+			var downloadFolderPathInput string
+			fmt.Scan(&downloadFolderPathInput)
+			downloadFolderPathInput = strings.TrimSpace(downloadFolderPathInput)
 
-		downloadAbsolutePath, err := validateAndPrepareFolder(downloadFolderPathInput)
-		if err != nil {
-			log.Fatalf("Cannot open folder to download: %v", err)
+			_downloadAbsolutePath, err := validateAndPrepareFolder(downloadFolderPathInput)
+			if err != nil {
+				log.Printf("Cannot open folder to download: %v\n", err)
+			} else {
+				downloadAbsolutePath = _downloadAbsolutePath
+				break
+			}
 		}
 
 		fmt.Printf("Recording started! Saving files to: %s\n", downloadAbsolutePath)
