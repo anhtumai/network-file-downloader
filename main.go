@@ -86,11 +86,7 @@ func main() {
 		log.Fatalf("could not start Playwrght: %v", err)
 	}
 	defer pw.Stop()
-
-	browser, err := pw.Firefox.Launch(playwright.BrowserTypeLaunchOptions{
-		Headless: playwright.Bool(false),
-	})
-	if err != nil {
+browser, err := pw.Firefox.Launch(playwright.BrowserTypeLaunchOptions{ Headless: playwright.Bool(false), }) if err != nil {
 		log.Fatalf("could not launch browser: %v", err)
 	}
 	defer browser.Close()
@@ -119,6 +115,13 @@ func main() {
 
 	downloadFolderAbsPathChan := make(chan string)
 
+	if _, err = page.Goto(*url); err != nil {
+		log.Fatalf("could not visit this url: %v", err)
+		os.Exit(1)
+	}
+
+	fmt.Println("Browser is running. Press Ctrl+C to exit...")
+
 	isRecording := false
 	// Main Thread Command line logic
 	fmt.Print("Start Recording (y/n): ")
@@ -127,7 +130,6 @@ func main() {
 
 	if startRecordingInput == "y" || startRecordingInput == "yes" {
 		fmt.Println("Recording started!")
-		isRecording = true
 	} else {
 		fmt.Println("Recording cancelled")
 		os.Exit(0)
@@ -144,7 +146,10 @@ func main() {
 		log.Fatalln("Cannot open folder to download: %v", err)
 		os.Exit(1)
 	}
+	isRecording = true
 	downloadFolderAbsPathChan <- downloadAbsolutePath
+
+	//
 	//
 
 	go responseWorker(browserResponseChan, downloadFolderAbsPathChan)
@@ -154,13 +159,6 @@ func main() {
 			browserResponseChan <- response
 		}
 	})
-
-	if _, err = page.Goto(*url); err != nil {
-		log.Fatalf("could not visit this url: %v", err)
-		os.Exit(1)
-	}
-
-	fmt.Println("Browser is running. Press Ctrl+C to exit...")
 
 	// Wait for Ctrl + C
 	sigChan := make(chan os.Signal, 1)
