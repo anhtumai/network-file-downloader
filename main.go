@@ -71,22 +71,27 @@ func validateAndPrepareFolder(path string) (string, error) {
 }
 
 func main() {
-	_ = fmt.Println // suppress "not used" error
-	_ = os.Args     // suppress "not used" error
-
+	// ========================================
+	// 1. Parse CLI Input
+	// ========================================
 	url := flag.String("url", "", "URL to open")
-	// downloadFolder := flag.String("download-folder", "", "Folder to download files to")
 	flag.Parse()
 
 	fmt.Println("Url:", *url)
-	// fileExtensions := []string{".vtt"}
 
+	// ========================================
+	// 2. Initialize Browser
+	// ========================================
 	pw, err := playwright.Run()
 	if err != nil {
-		log.Fatalf("could not start Playwrght: %v", err)
+		log.Fatalf("could not start Playwright: %v", err)
 	}
 	defer pw.Stop()
-browser, err := pw.Firefox.Launch(playwright.BrowserTypeLaunchOptions{ Headless: playwright.Bool(false), }) if err != nil {
+
+	browser, err := pw.Firefox.Launch(playwright.BrowserTypeLaunchOptions{
+		Headless: playwright.Bool(false),
+	})
+	if err != nil {
 		log.Fatalf("could not launch browser: %v", err)
 	}
 	defer browser.Close()
@@ -98,69 +103,74 @@ browser, err := pw.Firefox.Launch(playwright.BrowserTypeLaunchOptions{ Headless:
 			Width:  1920,
 			Height: 1080,
 		},
-		Locale:     playwright.String("fi-FI"), // Finnish locale
+		Locale:     playwright.String("fi-FI"),
 		TimezoneId: playwright.String("Europe/Helsinki"),
 		Geolocation: &playwright.Geolocation{
 			Latitude:  60.1699,
 			Longitude: 24.9384,
 		},
 	})
-
 	if err != nil {
 		log.Fatalf("could not create page: %v", err)
 	}
 
+	if _, err = page.Goto(*url); err != nil {
+		log.Fatalf("could not visit this url: %v", err)
+	}
+
+	fmt.Println("Browser opened successfully! Press Ctrl+C to exit...")
+
+	// ========================================
+	// 3. Start Workers and Handlers
+	// ========================================
 	browserResponseChan := make(chan playwright.Response)
 	defer close(browserResponseChan)
 
 	downloadFolderAbsPathChan := make(chan string)
 
-	if _, err = page.Goto(*url); err != nil {
-		log.Fatalf("could not visit this url: %v", err)
-		os.Exit(1)
-	}
-
-	fmt.Println("Browser is running. Press Ctrl+C to exit...")
-
-	isRecording := false
-	// Main Thread Command line logic
-	fmt.Print("Start Recording (y/n): ")
-	var startRecordingInput string
-	fmt.Scan(&startRecordingInput)
-
-	if startRecordingInput == "y" || startRecordingInput == "yes" {
-		fmt.Println("Recording started!")
-	} else {
-		fmt.Println("Recording cancelled")
-		os.Exit(0)
-	}
-
-	fmt.Print("Input folder path to download to: ")
-	var downloadFolderPathInput string
-
-	fmt.Scan(&downloadFolderPathInput)
-	downloadFolderPathInput = strings.TrimSpace(downloadFolderPathInput)
-
-	downloadAbsolutePath, err := validateAndPrepareFolder(downloadFolderPathInput)
-	if err != nil {
-		log.Fatalln("Cannot open folder to download: %v", err)
-		os.Exit(1)
-	}
-	isRecording = true
-	downloadFolderAbsPathChan <- downloadAbsolutePath
-
-	//
-	//
-
+	// Start response worker
 	go responseWorker(browserResponseChan, downloadFolderAbsPathChan)
 
+	// Send initial download folder path
+	// downloadFolderAbsPathChan <- downloadAbsolutePath
+
+	// Register response handler
+	isRecording := false
 	page.OnResponse(func(response playwright.Response) {
 		if isRecording {
 			browserResponseChan <- response
 		}
 	})
 
-	// Wait for Ctrl + C
+	// ========================================
+	// 4. User Interaction
+	// ========================================
+	fmt.Print("Start Recording (y/n): ")
+	var startRecordingInput string
+	fmt.Scan(&startRecordingInput)
+
+	if startRecordingInput != "y" && startRecordingInput != "yes" {
+		fmt.Println("Recording cancelled")
+		os.Exit(0)
+	}
+
+	fmt.Print("Input folder path to download to: ")
+	var downloadFolderPathInput string
+	fmt.Scan(&downloadFolderPathInput)
+	downloadFolderPathInput = strings.TrimSpace(downloadFolderPathInput)
+
+	downloadAbsolutePath, err := validateAndPrepareFolder(downloadFolderPathInput)
+	if err != nil {
+		log.Fatalf("Cannot open folder to download: %v", err)
+	}
+
+	fmt.Printf("Recording started! Saving files to: %s\n", downloadAbsolutePath)
+	isRecording = true
+	downloadFolderAbsPathChan <- downloadAbsolutePath
+
+	// ========================================
+	// 5. Wait for Shutdown
+	// ========================================
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 	<-sigChan
