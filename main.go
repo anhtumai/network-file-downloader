@@ -5,11 +5,9 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/signal"
 	"path"
 	"path/filepath"
 	"strings"
-	"syscall"
 
 	"github.com/playwright-community/playwright-go"
 )
@@ -25,30 +23,36 @@ func responseWorker(
 	responses <-chan playwright.Response,
 	downloadFolderAbsPathChan <-chan string,
 ) {
-	fmt.Println("Response worker started")
-
 	downloadFolderAbsPath := "."
 
 	for {
 		select {
-		case response := <-responses:
+		case response, ok := <-responses:
+			if !ok {
+				fmt.Println("Response channel closed, worker exiting")
+				return
+			}
 			responseUrl := response.URL()
 
 			if strings.HasSuffix(responseUrl, ".vtt") {
-				// Update global state
 				body, err := response.Text()
 				if err != nil {
 					fmt.Printf("Error reading body: %v\n", err)
-					return
+					continue
 				}
 				fileName := path.Base(responseUrl)
 				filePath := fmt.Sprintf("%s/%s", downloadFolderAbsPath, fileName)
-				os.WriteFile(filePath, []byte(body), 0644)
+				if err := os.WriteFile(filePath, []byte(body), 0644); err != nil {
+					fmt.Printf("Error writing file: %v\n", err)
+				}
 			}
 
-		case downloadFolderAbsPathValue := <-downloadFolderAbsPathChan:
+		case downloadFolderAbsPathValue, ok := <-downloadFolderAbsPathChan:
+			if !ok {
+				fmt.Println("Download folder channel closed, worker exiting")
+				return
+			}
 			downloadFolderAbsPath = downloadFolderAbsPathValue
-
 		}
 	}
 }
@@ -76,8 +80,6 @@ func main() {
 	// ========================================
 	url := flag.String("url", "", "URL to open")
 	flag.Parse()
-
-	fmt.Println("Url:", *url)
 
 	// ========================================
 	// 2. Initialize Browser
@@ -110,6 +112,7 @@ func main() {
 			Longitude: 24.9384,
 		},
 	})
+	defer page.Close()
 	if err != nil {
 		log.Fatalf("could not create page: %v", err)
 	}
@@ -123,10 +126,11 @@ func main() {
 	// ========================================
 	// 3. Start Workers and Handlers
 	// ========================================
-	browserResponseChan := make(chan playwright.Response)
+	browserResponseChan := make(chan playwright.Response, 100)
 	defer close(browserResponseChan)
 
-	downloadFolderAbsPathChan := make(chan string)
+	downloadFolderAbsPathChan := make(chan string, 1)
+	defer close(downloadFolderAbsPathChan)
 
 	// Start response worker
 	go responseWorker(browserResponseChan, downloadFolderAbsPathChan)
@@ -143,19 +147,7 @@ func main() {
 	})
 
 	// ========================================
-	// 4. Wait for Shutdown
-	// ========================================
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-
-	go func() {
-		<-sigChan
-		fmt.Println("\nShutting down...")
-		os.Exit(0)
-	}()
-
-	// ========================================
-	// 5. User Interaction
+	// 4. User Interaction
 	// ========================================
 	for {
 
@@ -165,7 +157,7 @@ func main() {
 
 		if startRecordingInput != "y" && startRecordingInput != "yes" {
 			fmt.Println("Recording cancelled")
-			os.Exit(0)
+			return
 		}
 
 		var downloadAbsolutePath string
