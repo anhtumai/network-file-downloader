@@ -143,43 +143,50 @@ func main() {
 	})
 
 	// ========================================
-	// 4. User Interaction
-	// ========================================
-	fmt.Print("Start Recording (y/n): ")
-	var startRecordingInput string
-	fmt.Scan(&startRecordingInput)
-
-	if startRecordingInput != "y" && startRecordingInput != "yes" {
-		fmt.Println("Recording cancelled")
-		os.Exit(0)
-	}
-
-	fmt.Print("Input folder path to download to: ")
-	var downloadFolderPathInput string
-	fmt.Scan(&downloadFolderPathInput)
-	downloadFolderPathInput = strings.TrimSpace(downloadFolderPathInput)
-
-	downloadAbsolutePath, err := validateAndPrepareFolder(downloadFolderPathInput)
-	if err != nil {
-		log.Fatalf("Cannot open folder to download: %v", err)
-	}
-
-	fmt.Printf("Recording started! Saving files to: %s\n", downloadAbsolutePath)
-	isRecording = true
-	downloadFolderAbsPathChan <- downloadAbsolutePath
-
-	fmt.Print("Press Enter to stop recording...")
-	fmt.Scanln()
-
-	fmt.Println("Recording stopped")
-	isRecording = false
-
-	// ========================================
-	// 5. Wait for Shutdown
+	// 4. Wait for Shutdown
 	// ========================================
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-	<-sigChan
 
-	fmt.Println("\nShutting down...")
+	go func() {
+		<-sigChan
+		fmt.Println("\nShutting down...")
+		os.Exit(0)
+	}()
+
+	// ========================================
+	// 5. User Interaction
+	// ========================================
+	for {
+
+		fmt.Print("Start Recording (y/n): ")
+		var startRecordingInput string
+		fmt.Scan(&startRecordingInput)
+
+		if startRecordingInput != "y" && startRecordingInput != "yes" {
+			fmt.Println("Recording cancelled")
+			os.Exit(0)
+		}
+
+		fmt.Print("Input folder path to download to: ")
+		var downloadFolderPathInput string
+		fmt.Scan(&downloadFolderPathInput)
+		downloadFolderPathInput = strings.TrimSpace(downloadFolderPathInput)
+
+		downloadAbsolutePath, err := validateAndPrepareFolder(downloadFolderPathInput)
+		if err != nil {
+			log.Fatalf("Cannot open folder to download: %v", err)
+		}
+
+		fmt.Printf("Recording started! Saving files to: %s\n", downloadAbsolutePath)
+		isRecording = true
+		downloadFolderAbsPathChan <- downloadAbsolutePath
+
+		fmt.Print("Press Enter to stop recording...")
+		fmt.Scanln()
+
+		fmt.Println("Recording stopped")
+		isRecording = false
+
+	}
 }
