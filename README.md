@@ -18,20 +18,17 @@ Watch the tool in action: [https://youtu.be/JzI21Cq0mxc](https://youtu.be/JzI21C
 
 ### Download Pre-built Binaries
 
-Download the latest release for your platform from the [releases page](https://github.com/YOUR_USERNAME/network-file-downloader/releases).
+Download the latest release for your platform from the [releases page](https://github.com/anhtumai/network-file-downloader/releases).
 
 ### Build from Source
 
 ```bash
 # Clone the repository
-git clone https://github.com/YOUR_USERNAME/network-file-downloader.git
+git clone https://github.com/anhtumai/network-file-downloader.git
 cd network-file-downloader
 
 # Install dependencies
 go mod download
-
-# Install Playwright browsers
-go run github.com/playwright-community/playwright-go/cmd/playwright@latest install --with-deps firefox
 
 # Build the binary
 go build -o network-file-downloader main.go
@@ -40,13 +37,13 @@ go build -o network-file-downloader main.go
 ## Usage
 
 ```bash
-network-file-downloader -url <URL> [-file-extension <extensions>]
+network-file-downloader --url <URL> [--file-extension <extensions>]
 ```
 
 ### Options
 
-- `-url`: URL to open in browser (required)
-- `-file-extension`: Comma-separated list of file extensions to download (default: `.vtt`)
+- `--url`: URL to open in browser (required)
+- `--file-extension`: Comma-separated list of file extensions to download (default: `.vtt`)
 
 ### Examples
 
