@@ -102,8 +102,8 @@ func main() {
 
 	// Validate required flags
 	if *url == "" {
-		fmt.Printf("%s✗ Error: -url flag is required%s\n", Red, Reset)
-		log.Fatal("Usage: network-file-downloader -url <URL> [-file-extension <extensions>]")
+		fmt.Printf("%s✗ Error: --url flag is required%s\n", Red, Reset)
+		log.Fatal("Usage: network-file-downloader --url <URL> [--file-extension <extensions>]")
 	}
 
 	// Parse file extensions

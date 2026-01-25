@@ -49,12 +49,12 @@ network-file-downloader --url <URL> [--file-extension <extensions>]
 
 Download `.vtt` subtitle files:
 ```bash
-network-file-downloader -url https://example.com/video
+network-file-downloader --url https://example.com/video
 ```
 
 Download multiple file types:
 ```bash
-network-file-downloader -url https://example.com/video -file-extension .vtt,.srt,.mp4
+network-file-downloader --url https://example.com/video --file-extension .vtt,.srt,.mp4
 ```
 
 ### Interactive Mode
