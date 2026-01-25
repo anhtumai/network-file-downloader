@@ -2,6 +2,10 @@
 
 A command-line tool that uses browser automation to download files from network requests. Monitor and capture files (like subtitles, media files, or any resource) as they're requested by websites.
 
+## Demo
+
+Watch the tool in action: [https://youtu.be/JzI21Cq0mxc](https://youtu.be/JzI21Cq0mxc)
+
 ## Features
 
 - Browser-based file downloading using Playwright
