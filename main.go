@@ -83,13 +83,9 @@ func responseWorker(
 
 func printCounterWorker(counterChan <-chan int) {
 	for counter := range counterChan {
-		if counter >= 0 {
-			fmt.Printf("\r%s%sTotal files downloaded: %d %s", Cyan, Bold, counter, Reset)
-			fmt.Printf("\n")
-			fmt.Printf("%s%sPress Enter to stop recording...%s ", Bold, Cyan, Reset)
-		}
+		// Use \r to return to start and overwrite the line
+		fmt.Printf("\r%s%sTotal files downloaded: %d%s    ", Cyan, Bold, counter, Reset)
 	}
-
 }
 
 // validateAndPrepareFolder converts a relative or absolute path to an absolute path
@@ -224,15 +220,16 @@ func main() {
 		}
 
 		fmt.Printf("%s%s✓ Recording started!%s Saving files to: %s%s%s\n", Bold, Green, Reset, Cyan, downloadAbsolutePath, Reset)
+
+		fmt.Printf("\n%s%sPress Enter to stop recording...%s\n", Bold, Cyan, Reset)
+
 		isRecording = true
 		downloadFolderAbsPathChan <- downloadAbsolutePath
-		// counterChan <- 0
+		counterChan <- 0
 
-		// fmt.Printf("\n")
-		// fmt.Printf("%s%sPress Enter to stop recording...%s ", Bold, Cyan, Reset)
 		fmt.Scanln()
 
-		fmt.Printf("%s✓ Recording stopped%s\n", Green, Reset)
+		fmt.Printf("\n%s✓ Recording stopped%s\n", Green, Reset)
 		isRecording = false
 
 	}
