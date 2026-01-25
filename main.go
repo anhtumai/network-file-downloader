@@ -57,7 +57,7 @@ func responseWorker(
 					continue
 				}
 				fileName := path.Base(responseUrl)
-				filePath := fmt.Sprintf("%s/%s", downloadFolderAbsPath, fileName)
+				filePath := filepath.Join(downloadFolderAbsPath, fileName)
 				if err := os.WriteFile(filePath, []byte(body), 0644); err != nil {
 					fmt.Printf("%s✗ Error writing file %s: %v%s\n", Red, fileName, err, Reset)
 				}
@@ -99,6 +99,12 @@ func main() {
 	url := flag.String("url", "", "URL to open in browser")
 	fileExtensionsStr := flag.String("file-extension", ".vtt", "Comma-separated list of file extensions to download (e.g., .vtt,.srt,.mp4)")
 	flag.Parse()
+
+	// Validate required flags
+	if *url == "" {
+		fmt.Printf("%s✗ Error: -url flag is required%s\n", Red, Reset)
+		log.Fatal("Usage: network-file-downloader -url <URL> [-file-extension <extensions>]")
+	}
 
 	// Parse file extensions
 	fileExtensions := strings.Split(*fileExtensionsStr, ",")
@@ -179,7 +185,7 @@ func main() {
 
 		var downloadAbsolutePath string
 		for {
-			fmt.Printf("%s%sInput folder path to download to:%s ", Bold, Yellow, Reset)
+			fmt.Printf("%s%sInput folder path to download to (e.g., . for current directory):%s ", Bold, Yellow, Reset)
 			var downloadFolderPathInput string
 			fmt.Scan(&downloadFolderPathInput)
 			downloadFolderPathInput = strings.TrimSpace(downloadFolderPathInput)

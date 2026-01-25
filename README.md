@@ -80,7 +80,7 @@ This is particularly useful for:
 ## Requirements
 
 - Go 1.21 or higher (for building from source)
-- Playwright Firefox browser (automatically installed with `playwright install`)
+- Playwright Firefox browser (automatically installed with `go run` or `go build`)
 
 ## License
 
