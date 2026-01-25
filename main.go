@@ -28,9 +28,12 @@ const (
 func responseWorker(
 	responses <-chan playwright.Response,
 	downloadFolderAbsPathChan <-chan string,
+	counterChan chan<- int,
 	fileExtensions []string,
 ) {
 	downloadFolderAbsPath := "."
+
+	counter := 0
 
 	for {
 		select {
@@ -60,6 +63,9 @@ func responseWorker(
 				filePath := filepath.Join(downloadFolderAbsPath, fileName)
 				if err := os.WriteFile(filePath, []byte(body), 0644); err != nil {
 					fmt.Printf("%s✗ Error writing file %s: %v%s\n", Red, fileName, err, Reset)
+				} else {
+					counter++
+					counterChan <- counter
 				}
 			}
 
@@ -69,8 +75,21 @@ func responseWorker(
 				return
 			}
 			downloadFolderAbsPath = downloadFolderAbsPathValue
+			// Reset counter since download folder changed meaning a new session
+			counter = 0
 		}
 	}
+}
+
+func printCounterWorker(counterChan <-chan int) {
+	for counter := range counterChan {
+		if counter >= 0 {
+			fmt.Printf("\r%s%sTotal files downloaded: %d %s", Cyan, Bold, counter, Reset)
+			fmt.Printf("\n")
+			fmt.Printf("%s%sPress Enter to stop recording...%s ", Bold, Cyan, Reset)
+		}
+	}
+
 }
 
 // validateAndPrepareFolder converts a relative or absolute path to an absolute path
@@ -155,8 +174,13 @@ func main() {
 	downloadFolderAbsPathChan := make(chan string, 1)
 	defer close(downloadFolderAbsPathChan)
 
+	counterChan := make(chan int, 10)
+	defer close(counterChan)
+
 	// Start response worker
-	go responseWorker(browserResponseChan, downloadFolderAbsPathChan, fileExtensions)
+	go responseWorker(browserResponseChan, downloadFolderAbsPathChan, counterChan, fileExtensions)
+
+	go printCounterWorker(counterChan)
 
 	// Send initial download folder path
 	// downloadFolderAbsPathChan <- downloadAbsolutePath
@@ -202,8 +226,10 @@ func main() {
 		fmt.Printf("%s%s✓ Recording started!%s Saving files to: %s%s%s\n", Bold, Green, Reset, Cyan, downloadAbsolutePath, Reset)
 		isRecording = true
 		downloadFolderAbsPathChan <- downloadAbsolutePath
+		// counterChan <- 0
 
-		fmt.Printf("%s%sPress Enter to stop recording...%s ", Bold, Cyan, Reset)
+		// fmt.Printf("\n")
+		// fmt.Printf("%s%sPress Enter to stop recording...%s ", Bold, Cyan, Reset)
 		fmt.Scanln()
 
 		fmt.Printf("%s✓ Recording stopped%s\n", Green, Reset)
