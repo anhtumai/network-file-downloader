@@ -81,9 +81,10 @@ func responseWorker(
 	}
 }
 
+// printCounterWorker listens to counter updates and displays the current count on a single line.
+// It uses carriage return (\r) to overwrite the same line on each update.
 func printCounterWorker(counterChan <-chan int) {
 	for counter := range counterChan {
-		// Use \r to return to start and overwrite the line
 		fmt.Printf("\r%s%sTotal files downloaded: %d%s    ", Cyan, Bold, counter, Reset)
 	}
 }
