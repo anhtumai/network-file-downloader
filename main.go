@@ -184,6 +184,7 @@ func main() {
 	url := flag.String("url", "", "URL to open in browser")
 	fileExtensionsStr := flag.String("file-extension", ".vtt", "Comma-separated list of file extensions to download (e.g., .vtt,.srt,.mp4)")
 	configPath := flag.String("config", "", "Path to browser config file (.json, .yaml, or .yml)")
+	sessionPath := flag.String("session", "", "Path to session file (.json) for saving/restoring login state")
 	flag.Parse()
 
 	// Validate required flags
@@ -242,35 +243,52 @@ func main() {
 	}
 	defer browser.Close()
 
-	pageOpts := playwright.BrowserNewPageOptions{
+	contextOpts := playwright.BrowserNewContextOptions{
 		Permissions: cfg.Permissions,
 		UserAgent:   playwright.String(cfg.UserAgent),
 	}
 	if cfg.Locale != "" {
-		pageOpts.Locale = playwright.String(cfg.Locale)
+		contextOpts.Locale = playwright.String(cfg.Locale)
 	}
 	if cfg.TimezoneId != "" {
-		pageOpts.TimezoneId = playwright.String(cfg.TimezoneId)
+		contextOpts.TimezoneId = playwright.String(cfg.TimezoneId)
 	}
 	if cfg.Viewport != nil {
-		pageOpts.Viewport = &playwright.Size{Width: cfg.Viewport.Width, Height: cfg.Viewport.Height}
+		contextOpts.Viewport = &playwright.Size{Width: cfg.Viewport.Width, Height: cfg.Viewport.Height}
 	}
 	if cfg.DeviceScaleFactor != 0 {
-		pageOpts.DeviceScaleFactor = playwright.Float(cfg.DeviceScaleFactor)
+		contextOpts.DeviceScaleFactor = playwright.Float(cfg.DeviceScaleFactor)
 	}
 	if cfg.HasTouch {
-		pageOpts.HasTouch = playwright.Bool(true)
+		contextOpts.HasTouch = playwright.Bool(true)
 	}
 	if cfg.ColorScheme != "" {
 		cs := playwright.ColorScheme(cfg.ColorScheme)
-		pageOpts.ColorScheme = &cs
+		contextOpts.ColorScheme = &cs
 	}
 	if len(cfg.ExtraHttpHeaders) > 0 {
-		pageOpts.ExtraHttpHeaders = cfg.ExtraHttpHeaders
+		contextOpts.ExtraHttpHeaders = cfg.ExtraHttpHeaders
 	}
 
-	page, err := browser.NewPage(pageOpts)
+	if *sessionPath != "" {
+		if _, err := os.Stat(*sessionPath); err == nil {
+			contextOpts.StorageStatePath = sessionPath
+			fmt.Printf("%s✓ Loaded session from: %s%s\n", Green, *sessionPath, Reset)
+		}
+	}
+
+	context, err := browser.NewContext(contextOpts)
+	if err != nil {
+		log.Fatalf("could not create context: %v", err)
+	}
+
+	page, err := context.NewPage()
+	if err != nil {
+		log.Fatalf("could not create page: %v", err)
+	}
+
 	defer page.Close()
+
 	if err != nil {
 		log.Fatalf("could not create page: %v", err)
 	}
@@ -321,6 +339,10 @@ func main() {
 
 		if startRecordingInput != "y" && startRecordingInput != "yes" {
 			fmt.Printf("%s⚠ Recording cancelled%s\n", Yellow, Reset)
+
+			if *sessionPath != "" {
+				context.StorageState(*sessionPath)
+			}
 			return
 		}
 
