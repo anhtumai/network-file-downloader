@@ -115,8 +115,9 @@ func responseWorker(
 
 			// Check if URL ends with any of the specified extensions
 			matchesExtension := false
+			fileNameInResponseUrl := strings.SplitN(responseUrl, "?", 2)[0]
 			for _, ext := range fileExtensions {
-				if strings.HasSuffix(responseUrl, ext) {
+				if strings.HasSuffix(fileNameInResponseUrl, ext) {
 					matchesExtension = true
 					break
 				}
