@@ -9,6 +9,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 
 	"github.com/playwright-community/playwright-go"
 	"gopkg.in/yaml.v3"
@@ -115,8 +116,9 @@ func responseWorker(
 
 			// Check if URL ends with any of the specified extensions
 			matchesExtension := false
+			fileNameInResponseUrl := strings.SplitN(responseUrl, "?", 2)[0]
 			for _, ext := range fileExtensions {
-				if strings.HasSuffix(responseUrl, ext) {
+				if strings.HasSuffix(fileNameInResponseUrl, ext) {
 					matchesExtension = true
 					break
 				}
@@ -128,7 +130,7 @@ func responseWorker(
 					fmt.Printf("%s✗ Error reading body: %v%s\n", Red, err, Reset)
 					continue
 				}
-				fileName := path.Base(responseUrl)
+				fileName := path.Base(fileNameInResponseUrl)
 				filePath := filepath.Join(downloadFolderAbsPath, fileName)
 				if err := os.WriteFile(filePath, []byte(body), 0644); err != nil {
 					fmt.Printf("%s✗ Error writing file %s: %v%s\n", Red, fileName, err, Reset)
@@ -167,14 +169,39 @@ func validateAndPrepareFolder(path string) (string, error) {
 	}
 
 	info, err := os.Stat(absPath)
-	if os.IsNotExist(err) {
-		return "", fmt.Errorf("cannot access folder: %v", err)
+	if err != nil {
+		return "", fmt.Errorf("cannot acccess folder: %v", err)
 	}
 	if !info.IsDir() {
 		return "", fmt.Errorf("path exists but is not a directory")
 	}
 
 	return absPath, nil
+}
+
+// ParseCookie parses a document.cookie string into a slice of Playwright cookies for the given page URL.
+func ParseCookie(documentCookie string, pageUrl string) []playwright.OptionalCookie {
+	result := []playwright.OptionalCookie{}
+	cookieParts := strings.Split(documentCookie, ";")
+	for _, cookiePart := range cookieParts {
+		cookieKeyValue := strings.SplitN(strings.TrimSpace(cookiePart), "=", 2)
+		if len(cookieKeyValue) < 2 {
+			continue
+		}
+		name := strings.TrimSpace(cookieKeyValue[0])
+		value := strings.TrimSpace(cookieKeyValue[1])
+		if name == "" {
+			continue
+		}
+		optionalCookie := playwright.OptionalCookie{
+			Name:  name,
+			Value: value,
+			URL:   &pageUrl,
+		}
+		result = append(result, optionalCookie)
+	}
+
+	return result
 }
 
 func main() {
@@ -184,6 +211,8 @@ func main() {
 	url := flag.String("url", "", "URL to open in browser")
 	fileExtensionsStr := flag.String("file-extension", ".vtt", "Comma-separated list of file extensions to download (e.g., .vtt,.srt,.mp4)")
 	configPath := flag.String("config", "", "Path to browser config file (.json, .yaml, or .yml)")
+	cookiePath := flag.String("cookie", "", "Path to cookie file")
+
 	flag.Parse()
 
 	// Validate required flags
@@ -242,38 +271,59 @@ func main() {
 	}
 	defer browser.Close()
 
-	pageOpts := playwright.BrowserNewPageOptions{
+	contextOpts := playwright.BrowserNewContextOptions{
 		Permissions: cfg.Permissions,
 		UserAgent:   playwright.String(cfg.UserAgent),
 	}
 	if cfg.Locale != "" {
-		pageOpts.Locale = playwright.String(cfg.Locale)
+		contextOpts.Locale = playwright.String(cfg.Locale)
 	}
 	if cfg.TimezoneId != "" {
-		pageOpts.TimezoneId = playwright.String(cfg.TimezoneId)
+		contextOpts.TimezoneId = playwright.String(cfg.TimezoneId)
 	}
 	if cfg.Viewport != nil {
-		pageOpts.Viewport = &playwright.Size{Width: cfg.Viewport.Width, Height: cfg.Viewport.Height}
+		contextOpts.Viewport = &playwright.Size{Width: cfg.Viewport.Width, Height: cfg.Viewport.Height}
 	}
 	if cfg.DeviceScaleFactor != 0 {
-		pageOpts.DeviceScaleFactor = playwright.Float(cfg.DeviceScaleFactor)
+		contextOpts.DeviceScaleFactor = playwright.Float(cfg.DeviceScaleFactor)
 	}
 	if cfg.HasTouch {
-		pageOpts.HasTouch = playwright.Bool(true)
+		contextOpts.HasTouch = playwright.Bool(true)
 	}
 	if cfg.ColorScheme != "" {
 		cs := playwright.ColorScheme(cfg.ColorScheme)
-		pageOpts.ColorScheme = &cs
+		contextOpts.ColorScheme = &cs
 	}
 	if len(cfg.ExtraHttpHeaders) > 0 {
-		pageOpts.ExtraHttpHeaders = cfg.ExtraHttpHeaders
+		contextOpts.ExtraHttpHeaders = cfg.ExtraHttpHeaders
 	}
 
-	page, err := browser.NewPage(pageOpts)
-	defer page.Close()
+	context, err := browser.NewContext(contextOpts)
+	if err != nil {
+		log.Fatalf("could not create context: %v", err)
+	}
+	defer context.Close()
+
+	if *cookiePath != "" {
+		cookieContentBytes, err := os.ReadFile(*cookiePath)
+		if err != nil {
+			log.Fatalf("could not read cookie file: %v", err)
+		}
+		cookieContent := string(cookieContentBytes)
+		optionalCookies := ParseCookie(cookieContent, *url)
+
+		err = context.AddCookies(optionalCookies)
+		if err != nil {
+			log.Fatalf("could not add cookie: %v", err)
+		}
+
+	}
+
+	page, err := context.NewPage()
 	if err != nil {
 		log.Fatalf("could not create page: %v", err)
 	}
+	defer page.Close()
 
 	if _, err = page.Goto(*url); err != nil {
 		log.Fatalf("could not visit this url: %v", err)
@@ -303,9 +353,9 @@ func main() {
 	// downloadFolderAbsPathChan <- downloadAbsolutePath
 
 	// Register response handler
-	isRecording := false
+	var isRecording atomic.Bool
 	page.OnResponse(func(response playwright.Response) {
-		if isRecording {
+		if isRecording.Load() {
 			browserResponseChan <- response
 		}
 	})
@@ -344,14 +394,14 @@ func main() {
 
 		fmt.Printf("\n%s%sPress Enter to stop recording...%s\n", Bold, Cyan, Reset)
 
-		isRecording = true
+		isRecording.Store(true)
 		downloadFolderAbsPathChan <- downloadAbsolutePath
 		counterChan <- 0
 
 		fmt.Scanln()
 
 		fmt.Printf("\n%s✓ Recording stopped%s\n", Green, Reset)
-		isRecording = false
+		isRecording.Store(false)
 
 	}
 }
