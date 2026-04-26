@@ -39,13 +39,13 @@ go build -o network-file-downloader main.go
 ## Usage
 
 ```bash
-network-file-downloader --url <URL> [--file-extension <extensions>] [--config <path>] [--cookie <path>]
+network-file-downloader --url <URL> --file-extensions <extensions> [--config <path>] [--cookie <path>]
 ```
 
 ### Options
 
 - `--url`: URL to open in browser (required)
-- `--file-extension`: Comma-separated list of file extensions to download (default: `.vtt`)
+- `--file-extensions`: Comma-separated list of file extensions to download (required, e.g. `.vtt,.srt,.mp4`)
 - `--config`: Path to a browser config file (`.json`, `.yaml`, or `.yml`)
 - `--cookie`: Path to a cookie file (document.cookie format)
 
@@ -53,22 +53,22 @@ network-file-downloader --url <URL> [--file-extension <extensions>] [--config <p
 
 Download `.vtt` subtitle files:
 ```bash
-network-file-downloader --url https://example.com/video
+network-file-downloader --url https://example.com/video --file-extensions .vtt
 ```
 
 Download multiple file types:
 ```bash
-network-file-downloader --url https://example.com/video --file-extension .vtt,.srt,.mp4
+network-file-downloader --url https://example.com/video --file-extensions .vtt,.srt,.mp4
 ```
 
 Use a custom browser config:
 ```bash
-network-file-downloader --url https://example.com/video --config ./config.json
+network-file-downloader --url https://example.com/video --file-extensions .vtt,.srt --config ./config.json
 ```
 
 Use cookies for authenticated sessions:
 ```bash
-network-file-downloader --url https://example.com/video --cookie ./cookie.txt
+network-file-downloader --url https://example.com/video --file-extensions .vtt,.srt --cookie ./cookie.txt
 ```
 
 ### Browser Config File
