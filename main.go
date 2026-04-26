@@ -129,7 +129,7 @@ func responseWorker(
 					fmt.Printf("%s✗ Error reading body: %v%s\n", Red, err, Reset)
 					continue
 				}
-				fileName := path.Base(responseUrl)
+				fileName := path.Base(fileNameInResponseUrl)
 				filePath := filepath.Join(downloadFolderAbsPath, fileName)
 				if err := os.WriteFile(filePath, []byte(body), 0644); err != nil {
 					fmt.Printf("%s✗ Error writing file %s: %v%s\n", Red, fileName, err, Reset)
@@ -168,6 +168,9 @@ func validateAndPrepareFolder(path string) (string, error) {
 	}
 
 	info, err := os.Stat(absPath)
+	if err != nil {
+		return "", fmt.Errorf("cannot acccess folder: %v", err)
+	}
 	if os.IsNotExist(err) {
 		return "", fmt.Errorf("cannot access folder: %v", err)
 	}
@@ -298,10 +301,10 @@ func main() {
 	}
 
 	context, err := browser.NewContext(contextOpts)
-	defer context.Close()
 	if err != nil {
 		log.Fatalf("could not create context: %v", err)
 	}
+	defer context.Close()
 
 	if *cookiePath != "" {
 		cookieContentBytes, err := os.ReadFile(*cookiePath)
@@ -319,10 +322,10 @@ func main() {
 	}
 
 	page, err := context.NewPage()
-	defer page.Close()
 	if err != nil {
 		log.Fatalf("could not create page: %v", err)
 	}
+	defer page.Close()
 
 	if _, err = page.Goto(*url); err != nil {
 		log.Fatalf("could not visit this url: %v", err)
