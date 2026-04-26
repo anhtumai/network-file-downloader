@@ -170,7 +170,7 @@ func validateAndPrepareFolder(path string) (string, error) {
 
 	info, err := os.Stat(absPath)
 	if err != nil {
-		return "", fmt.Errorf("cannot acccess folder: %v", err)
+		return "", fmt.Errorf("cannot access folder: %v", err)
 	}
 	if !info.IsDir() {
 		return "", fmt.Errorf("path exists but is not a directory")
@@ -209,7 +209,7 @@ func main() {
 	// 1. Parse CLI Input
 	// ========================================
 	url := flag.String("url", "", "URL to open in browser")
-	fileExtensionsStr := flag.String("file-extension", ".vtt", "Comma-separated list of file extensions to download (e.g., .vtt,.srt,.mp4)")
+	fileExtensionsStr := flag.String("file-extension", "", "Comma-separated list of file extensions to download (e.g., .vtt,.srt,.mp4)")
 	configPath := flag.String("config", "", "Path to browser config file (.json, .yaml, or .yml)")
 	cookiePath := flag.String("cookie", "", "Path to cookie file")
 
@@ -218,7 +218,12 @@ func main() {
 	// Validate required flags
 	if *url == "" {
 		fmt.Printf("%s✗ Error: --url flag is required%s\n", Red, Reset)
-		log.Fatal("Usage: network-file-downloader --url <URL> [--file-extension <extensions>] [--config <path>]")
+		log.Fatal("Usage: network-file-downloader --url <URL> --file-extension <extensions> [--config <path>] [--cookie <path>]")
+	}
+
+	if *fileExtensionsStr == "" {
+		fmt.Printf("%s✗ Error: --file-extension flag is required%s\n", Red, Reset)
+		log.Fatal("Usage: network-file-downloader --url <URL> --file-extension <extensions> [--config <path>] [--cookie <path>]")
 	}
 
 	// Load browser config
