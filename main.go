@@ -9,6 +9,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 
 	"github.com/playwright-community/playwright-go"
 	"gopkg.in/yaml.v3"
@@ -170,9 +171,6 @@ func validateAndPrepareFolder(path string) (string, error) {
 	info, err := os.Stat(absPath)
 	if err != nil {
 		return "", fmt.Errorf("cannot acccess folder: %v", err)
-	}
-	if os.IsNotExist(err) {
-		return "", fmt.Errorf("cannot access folder: %v", err)
 	}
 	if !info.IsDir() {
 		return "", fmt.Errorf("path exists but is not a directory")
@@ -355,9 +353,9 @@ func main() {
 	// downloadFolderAbsPathChan <- downloadAbsolutePath
 
 	// Register response handler
-	isRecording := false
+	var isRecording atomic.Bool
 	page.OnResponse(func(response playwright.Response) {
-		if isRecording {
+		if isRecording.Load() {
 			browserResponseChan <- response
 		}
 	})
@@ -396,14 +394,14 @@ func main() {
 
 		fmt.Printf("\n%s%sPress Enter to stop recording...%s\n", Bold, Cyan, Reset)
 
-		isRecording = true
+		isRecording.Store(true)
 		downloadFolderAbsPathChan <- downloadAbsolutePath
 		counterChan <- 0
 
 		fmt.Scanln()
 
 		fmt.Printf("\n%s✓ Recording stopped%s\n", Green, Reset)
-		isRecording = false
+		isRecording.Store(false)
 
 	}
 }
