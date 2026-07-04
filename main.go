@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"log"
 	"os"
 	"os/signal"
 	"path"
@@ -171,6 +170,15 @@ func parseCookie(documentCookie string, pageUrl string) []playwright.OptionalCoo
 }
 
 func main() {
+	if err := run(); err != nil {
+		os.Exit(1)
+	}
+}
+
+// run holds the actual program logic. Returning an error here (instead of
+// calling log.Fatal) means every defer registered below always runs, so the
+// browser process is never leaked when something fails partway through.
+func run() error {
 	// ========================================
 	// 1. Parse CLI Input
 	// ========================================
@@ -204,12 +212,12 @@ func main() {
 	// Validate required flags
 	if *url == "" {
 		fmt.Printf("%s✗ Error: --url flag is required%s\n", Red, Reset)
-		log.Fatal("Usage: network-file-downloader --url <URL> --file-extensions <extensions> [--config <path>] [--cookie <path>]")
+		return fmt.Errorf("usage: network-file-downloader --url <URL> --file-extensions <extensions> [--config <path>] [--cookie <path>]")
 	}
 
 	if *fileExtensionsStr == "" {
 		fmt.Printf("%s✗ Error: --file-extensions flag is required%s\n", Red, Reset)
-		log.Fatal("Usage: network-file-downloader --url <URL> --file-extensions <extensions> [--config <path>] [--cookie <path>]")
+		return fmt.Errorf("usage: network-file-downloader --url <URL> --file-extensions <extensions> [--config <path>] [--cookie <path>]")
 	}
 
 	// --config and --browser are mutually exclusive: when a config file is used,
@@ -222,7 +230,7 @@ func main() {
 	})
 	if *configFilePath != "" && browserFlagSet {
 		fmt.Printf("%s✗ Error: --browser cannot be used together with --config; set \"browser\" in the config file instead%s\n", Red, Reset)
-		log.Fatal("Usage: network-file-downloader --url <URL> --file-extensions <extensions> [--config <path> | --browser firefox|chromium|webkit]")
+		return fmt.Errorf("usage: network-file-downloader --url <URL> --file-extensions <extensions> [--config <path> | --browser firefox|chromium|webkit]")
 	}
 
 	// Ask user for input on optional parameter with empty value
@@ -233,11 +241,12 @@ func main() {
 	}
 	if err := os.MkdirAll(downloadFolderPath, 0755); err != nil {
 		fmt.Printf("%s✗ Error: could not create download folder %q: %v%s\n", Red, downloadFolderPath, err, Reset)
-		log.Fatal("Usage: network-file-downloader --url <URL> --file-extensions <extensions> [--download-folder <path>]")
+		return fmt.Errorf("usage: network-file-downloader --url <URL> --file-extensions <extensions> [--download-folder <path>]")
 	}
 	downloadFolderAbsPath, err := filepath.Abs(downloadFolderPath)
 	if err != nil {
-		log.Fatalf("could not resolve download folder path: %v", err)
+		fmt.Printf("%s✗ Error: could not resolve download folder path: %v%s\n", Red, err, Reset)
+		return err
 	}
 
 	// Load browser config
@@ -245,7 +254,8 @@ func main() {
 	if *configFilePath != "" {
 		loaded, err := loadConfig(*configFilePath)
 		if err != nil {
-			log.Fatalf("could not load config: %v", err)
+			fmt.Printf("%s✗ Error: could not load config: %v%s\n", Red, err, Reset)
+			return err
 		}
 		applyDefaults(&loaded, cfg)
 		cfg = loaded
@@ -260,7 +270,7 @@ func main() {
 	case "firefox", "chromium", "webkit":
 	default:
 		fmt.Printf("%s✗ Error: invalid browser value %q (must be firefox, chromium, or webkit)%s\n", Red, cfg.Browser, Reset)
-		log.Fatal("Usage: network-file-downloader --url <URL> --file-extensions <extensions> [--browser firefox|chromium|webkit]")
+		return fmt.Errorf("usage: network-file-downloader --url <URL> --file-extensions <extensions> [--browser firefox|chromium|webkit]")
 	}
 
 	// Parse file extensions, dropping empty entries (e.g. from a trailing/double
@@ -274,7 +284,7 @@ func main() {
 	}
 	if len(fileExtensions) == 0 {
 		fmt.Printf("%s✗ Error: --file-extensions must contain at least one non-empty extension%s\n", Red, Reset)
-		log.Fatal("Usage: network-file-downloader --url <URL> --file-extensions <extensions>")
+		return fmt.Errorf("usage: network-file-downloader --url <URL> --file-extensions <extensions>")
 	}
 
 	// ========================================
@@ -282,7 +292,8 @@ func main() {
 	// ========================================
 	pw, err := playwright.Run()
 	if err != nil {
-		log.Fatalf("could not start Playwright: %v", err)
+		fmt.Printf("%s✗ Error: could not start Playwright: %v%s\n", Red, err, Reset)
+		return err
 	}
 	defer pw.Stop()
 
@@ -305,7 +316,8 @@ func main() {
 
 	browser, err := browserType.Launch(launchOpts)
 	if err != nil {
-		log.Fatalf("could not launch browser: %v", err)
+		fmt.Printf("%s✗ Error: could not launch browser: %v%s\n", Red, err, Reset)
+		return err
 	}
 	defer browser.Close()
 
@@ -338,7 +350,8 @@ func main() {
 
 	context, err := browser.NewContext(contextOpts)
 	if err != nil {
-		log.Fatalf("could not create context: %v", err)
+		fmt.Printf("%s✗ Error: could not create context: %v%s\n", Red, err, Reset)
+		return err
 	}
 	defer context.Close()
 
@@ -348,13 +361,14 @@ func main() {
 		}
 		cookieContentBytes, err := os.ReadFile(*cookieFilePath)
 		if err != nil {
-			log.Fatalf("could not read cookie file: %v", err)
+			fmt.Printf("%s✗ Error: could not read cookie file: %v%s\n", Red, err, Reset)
+			return err
 		}
 		cookieContent := string(cookieContentBytes)
 		optionalCookies := parseCookie(cookieContent, *url)
-		err = context.AddCookies(optionalCookies)
-		if err != nil {
-			log.Fatalf("could not add cookie: %v", err)
+		if err := context.AddCookies(optionalCookies); err != nil {
+			fmt.Printf("%s✗ Error: could not add cookie: %v%s\n", Red, err, Reset)
+			return err
 		}
 	}
 
@@ -363,24 +377,27 @@ func main() {
 		reader := bufio.NewReader(os.Stdin)
 		cookieContent, err := reader.ReadString('\n')
 		if err != nil {
-			log.Fatalf("could not read cookie input: %v", err)
+			fmt.Printf("%s✗ Error: could not read cookie input: %v%s\n", Red, err, Reset)
+			return err
 		}
 		cookieContent = strings.TrimSpace(cookieContent)
 		optionalCookies := parseCookie(cookieContent, *url)
-		err = context.AddCookies(optionalCookies)
-		if err != nil {
-			log.Fatalf("could not add cookie: %v", err)
+		if err := context.AddCookies(optionalCookies); err != nil {
+			fmt.Printf("%s✗ Error: could not add cookie: %v%s\n", Red, err, Reset)
+			return err
 		}
 	}
 
 	page, err := context.NewPage()
 	if err != nil {
-		log.Fatalf("could not create page: %v", err)
+		fmt.Printf("%s✗ Error: could not create page: %v%s\n", Red, err, Reset)
+		return err
 	}
 	defer page.Close()
 
 	if _, err = page.Goto(*url); err != nil {
-		log.Fatalf("could not visit this url: %v", err)
+		fmt.Printf("%s✗ Error: could not visit this url: %v%s\n", Red, err, Reset)
+		return err
 	}
 
 	fmt.Printf("%s%s✓ Browser opened successfully!%s Press Ctrl+C to exit...\n", Bold, Green, Reset)
@@ -391,9 +408,6 @@ func main() {
 	// ========================================
 	browserResponseChan := make(chan playwright.Response, 100)
 	defer close(browserResponseChan)
-
-	startDownloadChan := make(chan bool, 1)
-	defer close(startDownloadChan)
 
 	counterChan := make(chan int, 10)
 	defer close(counterChan)
@@ -436,4 +450,6 @@ func main() {
 	<-sigChan
 
 	fmt.Printf("\n%s✓ Recording stopped%s\n", Green, Reset)
+
+	return nil
 }
