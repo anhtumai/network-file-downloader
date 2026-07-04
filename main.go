@@ -180,7 +180,7 @@ func main() {
 // browser process is never leaked when something fails partway through.
 func run() error {
 	// ========================================
-	// 1. Parse CLI Input
+	// 0. Parse CLI Input
 	// ========================================
 
 	// Mandatory
@@ -286,6 +286,15 @@ func run() error {
 		fmt.Printf("%s✗ Error: --file-extensions must contain at least one non-empty extension%s\n", Red, Reset)
 		return fmt.Errorf("usage: network-file-downloader --url <URL> --file-extensions <extensions>")
 	}
+
+	// ========================================
+	// 1. Init channels
+	// ========================================
+	counterChan := make(chan int, 10)
+	defer close(counterChan)
+
+	browserResponseChan := make(chan playwright.Response, 100)
+	defer close(browserResponseChan)
 
 	// ========================================
 	// 2. Initialize Browser
@@ -406,11 +415,6 @@ func run() error {
 	// ========================================
 	// 3. Start Workers and Handlers
 	// ========================================
-	browserResponseChan := make(chan playwright.Response, 100)
-	defer close(browserResponseChan)
-
-	counterChan := make(chan int, 10)
-	defer close(counterChan)
 
 	// Start response worker
 	go responseWorker(
