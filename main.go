@@ -206,6 +206,7 @@ func main() {
 		"chromium",
 		"Browser to use (Optional). Possible values: firefox, chromium, webkit. Defaults to chromium.",
 	)
+	confirmRecord := flag.Bool("confirm-record", false, "Confimr before recording the download. Useful if you want to record only after performing certain action in the browser(Optional)")
 
 	// Optional, to be entered later
 	withCookie := flag.Bool("with-cookie", false, "With this flag, the program will ask you to enter a cookie (Optional)")
@@ -413,8 +414,10 @@ func main() {
 	// ========================================
 	// 4. User Interaction
 	// ========================================
-	fmt.Printf("%s%sPress Enter to confirm start recording...%s\n", Bold, Yellow, Reset)
-	fmt.Scanln()
+	if *confirmRecord {
+		fmt.Printf("%s%sPress Enter to confirm start recording...%s\n", Bold, Yellow, Reset)
+		fmt.Scanln()
+	}
 
 	fmt.Printf("%s%s✓ Recording started!%s Saving files to: %s%s%s\n", Bold, Green, Reset, Cyan, downloadFolderAbsPath, Reset)
 
