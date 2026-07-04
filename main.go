@@ -231,6 +231,19 @@ func main() {
 		log.Fatal("Usage: network-file-downloader --url <URL> --file-extensions <extensions> [--config <path>] [--cookie <path>]")
 	}
 
+	// --config and --browser are mutually exclusive: when a config file is used,
+	// the browser must be selected via the config's "browser" field.
+	browserFlagSet := false
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "browser" {
+			browserFlagSet = true
+		}
+	})
+	if *configFilePath != "" && browserFlagSet {
+		fmt.Printf("%s✗ Error: --browser cannot be used together with --config; set \"browser\" in the config file instead%s\n", Red, Reset)
+		log.Fatal("Usage: network-file-downloader --url <URL> --file-extensions <extensions> [--config <path> | --browser firefox|chromium|webkit]")
+	}
+
 	// Ask user for input on optional parameter with empty value
 	downloadFolderPath := *downloadFolderPathFlag
 	if downloadFolderPath == "" {
@@ -258,11 +271,14 @@ func main() {
 		fmt.Printf("%s✓ Loaded config from: %s%s\n", Green, *configFilePath, Reset)
 	}
 
-	switch *browserFlag {
-	case "firefox", "chromium", "webkit":
+	if browserFlagSet {
 		cfg.Browser = *browserFlag
+	}
+
+	switch cfg.Browser {
+	case "firefox", "chromium", "webkit":
 	default:
-		fmt.Printf("%s✗ Error: invalid --browser value %q (must be firefox, chromium, or webkit)%s\n", Red, *browserFlag, Reset)
+		fmt.Printf("%s✗ Error: invalid browser value %q (must be firefox, chromium, or webkit)%s\n", Red, cfg.Browser, Reset)
 		log.Fatal("Usage: network-file-downloader --url <URL> --file-extensions <extensions> [--browser firefox|chromium|webkit]")
 	}
 
