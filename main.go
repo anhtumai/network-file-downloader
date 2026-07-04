@@ -145,27 +145,8 @@ func printCounterWorker(counterChan <-chan int) {
 	}
 }
 
-// validateAndPrepareFolder converts a relative or absolute path to an absolute path
-// and validates that it exists and is a directory.
-func validateAndPrepareFolder(path string) (string, error) {
-	absPath, err := filepath.Abs(path)
-	if err != nil {
-		return "", fmt.Errorf("invalid path: %v", err)
-	}
-
-	info, err := os.Stat(absPath)
-	if err != nil {
-		return "", fmt.Errorf("cannot access folder: %v", err)
-	}
-	if !info.IsDir() {
-		return "", fmt.Errorf("path exists but is not a directory")
-	}
-
-	return absPath, nil
-}
-
-// ParseCookie parses a document.cookie string into a slice of Playwright cookies for the given page URL.
-func ParseCookie(documentCookie string, pageUrl string) []playwright.OptionalCookie {
+// parseCookie parses a document.cookie string into a slice of Playwright cookies for the given page URL.
+func parseCookie(documentCookie string, pageUrl string) []playwright.OptionalCookie {
 	result := []playwright.OptionalCookie{}
 	cookieParts := strings.Split(documentCookie, ";")
 	for _, cookiePart := range cookieParts {
@@ -282,10 +263,18 @@ func main() {
 		log.Fatal("Usage: network-file-downloader --url <URL> --file-extensions <extensions> [--browser firefox|chromium|webkit]")
 	}
 
-	// Parse file extensions
-	fileExtensions := strings.Split(*fileExtensionsStr, ",")
-	for i := range fileExtensions {
-		fileExtensions[i] = strings.TrimSpace(fileExtensions[i])
+	// Parse file extensions, dropping empty entries (e.g. from a trailing/double
+	// comma) since an empty extension would match every response's URL.
+	var fileExtensions []string
+	for _, ext := range strings.Split(*fileExtensionsStr, ",") {
+		ext = strings.TrimSpace(ext)
+		if ext != "" {
+			fileExtensions = append(fileExtensions, ext)
+		}
+	}
+	if len(fileExtensions) == 0 {
+		fmt.Printf("%s✗ Error: --file-extensions must contain at least one non-empty extension%s\n", Red, Reset)
+		log.Fatal("Usage: network-file-downloader --url <URL> --file-extensions <extensions>")
 	}
 
 	// ========================================
@@ -362,7 +351,7 @@ func main() {
 			log.Fatalf("could not read cookie file: %v", err)
 		}
 		cookieContent := string(cookieContentBytes)
-		optionalCookies := ParseCookie(cookieContent, *url)
+		optionalCookies := parseCookie(cookieContent, *url)
 		err = context.AddCookies(optionalCookies)
 		if err != nil {
 			log.Fatalf("could not add cookie: %v", err)
@@ -377,7 +366,7 @@ func main() {
 			log.Fatalf("could not read cookie input: %v", err)
 		}
 		cookieContent = strings.TrimSpace(cookieContent)
-		optionalCookies := ParseCookie(cookieContent, *url)
+		optionalCookies := parseCookie(cookieContent, *url)
 		err = context.AddCookies(optionalCookies)
 		if err != nil {
 			log.Fatalf("could not add cookie: %v", err)
