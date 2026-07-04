@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
 	"path"
 	"path/filepath"
 	"strings"
@@ -97,18 +98,21 @@ const (
 // responseWorker listens to the responses channel and saves files matching the specified extensions to disk.
 // It runs continuously until the channel is closed.
 func responseWorker(
-	responses <-chan playwright.Response,
-	downloadFolderAbsPathChan <-chan string,
-	counterChan chan<- int,
+	downloadFolderAbsPath string,
 	fileExtensions []string,
+	responseChan <-chan playwright.Response,
+	counterChan chan<- int,
 ) {
-	downloadFolderAbsPath := "."
+	startDownload := false
 
 	counter := 0
 
 	for {
 		select {
-		case response, ok := <-responses:
+		case response, ok := <-responseChan:
+			if !startDownload {
+				return
+			}
 			if !ok {
 				fmt.Printf("%s✓ Response channel closed, worker exiting%s\n", Cyan, Reset)
 				return
@@ -141,14 +145,12 @@ func responseWorker(
 				}
 			}
 
-		case downloadFolderAbsPathValue, ok := <-downloadFolderAbsPathChan:
+		case startDownloadValue, ok := <-startDownloadChan:
 			if !ok {
-				fmt.Printf("%s✓ Download folder channel closed, worker exiting%s\n", Cyan, Reset)
+				fmt.Printf("%s✓ Start download channel closed, worker exiting%s\n", Cyan, Reset)
 				return
 			}
-			downloadFolderAbsPath = downloadFolderAbsPathValue
-			// Reset counter since download folder changed meaning a new session
-			counter = 0
+			startDownload = startDownloadValue
 		}
 	}
 }
@@ -225,7 +227,7 @@ func main() {
 
 	// Optional, to be entered later
 	withCookie := flag.Bool("with-cookie", false, "With this flag, the program will ask you to enter a cookie (Optional)")
-	downloadFolderPath := flag.String(
+	downloadFolderPathFlag := flag.String(
 		"download-folder",
 		"",
 		"Folder to download all the files to (Optional). "+
@@ -244,6 +246,21 @@ func main() {
 	if *fileExtensionsStr == "" {
 		fmt.Printf("%s✗ Error: --file-extensions flag is required%s\n", Red, Reset)
 		log.Fatal("Usage: network-file-downloader --url <URL> --file-extensions <extensions> [--config <path>] [--cookie <path>]")
+	}
+
+	// Ask user for input on optional parameter with empty value
+	downloadFolderPath := *downloadFolderPathFlag
+	if downloadFolderPath == "" {
+		fmt.Printf("%s%sInput folder path to download to (e.g., . for current directory):%s ", Bold, Yellow, Reset)
+		fmt.Scan(&downloadFolderPath)
+	}
+	if err := os.MkdirAll(downloadFolderPath, 0755); err != nil {
+		fmt.Printf("%s✗ Error: could not create download folder %q: %v%s\n", Red, downloadFolderPath, err, Reset)
+		log.Fatal("Usage: network-file-downloader --url <URL> --file-extensions <extensions> [--download-folder <path>]")
+	}
+	downloadFolderAbsPath, err := filepath.Abs(downloadFolderPath)
+	if err != nil {
+		log.Fatalf("could not resolve download folder path: %v", err)
 	}
 
 	// Load browser config
@@ -387,19 +404,21 @@ func main() {
 	browserResponseChan := make(chan playwright.Response, 100)
 	defer close(browserResponseChan)
 
-	downloadFolderAbsPathChan := make(chan string, 1)
-	defer close(downloadFolderAbsPathChan)
+	startDownloadChan := make(chan bool, 1)
+	defer close(startDownloadChan)
 
 	counterChan := make(chan int, 10)
 	defer close(counterChan)
 
 	// Start response worker
-	go responseWorker(browserResponseChan, downloadFolderAbsPathChan, counterChan, fileExtensions)
+	go responseWorker(
+		downloadFolderAbsPath,
+		fileExtensions,
+		browserResponseChan,
+		counterChan,
+	)
 
 	go printCounterWorker(counterChan)
-
-	// Send initial download folder path
-	// downloadFolderAbsPathChan <- downloadAbsolutePath
 
 	// Register response handler
 	var isRecording atomic.Bool
@@ -412,45 +431,19 @@ func main() {
 	// ========================================
 	// 4. User Interaction
 	// ========================================
-	for {
+	fmt.Printf("%s%sPress Enter to confirm start recording...%s\n", Bold, Yellow, Reset)
+	fmt.Scanln()
 
-		fmt.Printf("%s%sStart Recording (y/n):%s ", Bold, Yellow, Reset)
-		var startRecordingInput string
-		fmt.Scan(&startRecordingInput)
+	fmt.Printf("%s%s✓ Recording started!%s Saving files to: %s%s%s\n", Bold, Green, Reset, Cyan, downloadFolderAbsPath, Reset)
 
-		if startRecordingInput != "y" && startRecordingInput != "yes" {
-			fmt.Printf("%s⚠ Recording cancelled%s\n", Yellow, Reset)
-			return
-		}
+	fmt.Printf("\n%s%sPress Ctrl+C to stop recording...%s\n", Bold, Cyan, Reset)
 
-		var downloadAbsolutePath string
-		for {
-			fmt.Printf("%s%sInput folder path to download to (e.g., . for current directory):%s ", Bold, Yellow, Reset)
-			var downloadFolderPathInput string
-			fmt.Scan(&downloadFolderPathInput)
-			downloadFolderPathInput = strings.TrimSpace(downloadFolderPathInput)
+	isRecording.Store(true)
+	counterChan <- 0
 
-			_downloadAbsolutePath, err := validateAndPrepareFolder(downloadFolderPathInput)
-			if err != nil {
-				fmt.Printf("%s✗ Cannot open folder: %v%s\n", Red, err, Reset)
-			} else {
-				downloadAbsolutePath = _downloadAbsolutePath
-				break
-			}
-		}
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt)
+	<-sigChan
 
-		fmt.Printf("%s%s✓ Recording started!%s Saving files to: %s%s%s\n", Bold, Green, Reset, Cyan, downloadAbsolutePath, Reset)
-
-		fmt.Printf("\n%s%sPress Enter to stop recording...%s\n", Bold, Cyan, Reset)
-
-		isRecording.Store(true)
-		downloadFolderAbsPathChan <- downloadAbsolutePath
-		counterChan <- 0
-
-		fmt.Scanln()
-
-		fmt.Printf("\n%s✓ Recording stopped%s\n", Green, Reset)
-		isRecording.Store(false)
-
-	}
+	fmt.Printf("\n%s✓ Recording stopped%s\n", Green, Reset)
 }
