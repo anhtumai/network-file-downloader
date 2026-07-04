@@ -103,56 +103,38 @@ func responseWorker(
 	responseChan <-chan playwright.Response,
 	counterChan chan<- int,
 ) {
-	startDownload := false
-
 	counter := 0
 
-	for {
-		select {
-		case response, ok := <-responseChan:
-			if !startDownload {
-				return
-			}
-			if !ok {
-				fmt.Printf("%s✓ Response channel closed, worker exiting%s\n", Cyan, Reset)
-				return
-			}
-			responseUrl := response.URL()
+	for response := range responseChan {
+		responseUrl := response.URL()
 
-			// Check if URL ends with any of the specified extensions
-			matchesExtension := false
-			fileNameInResponseUrl := strings.SplitN(responseUrl, "?", 2)[0]
-			for _, ext := range fileExtensions {
-				if strings.HasSuffix(fileNameInResponseUrl, ext) {
-					matchesExtension = true
-					break
-				}
+		// Check if URL ends with any of the specified extensions
+		matchesExtension := false
+		fileNameInResponseUrl := strings.SplitN(responseUrl, "?", 2)[0]
+		for _, ext := range fileExtensions {
+			if strings.HasSuffix(fileNameInResponseUrl, ext) {
+				matchesExtension = true
+				break
 			}
+		}
 
-			if matchesExtension {
-				body, err := response.Text()
-				if err != nil {
-					fmt.Printf("%s✗ Error reading body: %v%s\n", Red, err, Reset)
-					continue
-				}
-				fileName := path.Base(fileNameInResponseUrl)
-				filePath := filepath.Join(downloadFolderAbsPath, fileName)
-				if err := os.WriteFile(filePath, []byte(body), 0644); err != nil {
-					fmt.Printf("%s✗ Error writing file %s: %v%s\n", Red, fileName, err, Reset)
-				} else {
-					counter++
-					counterChan <- counter
-				}
+		if matchesExtension {
+			body, err := response.Text()
+			if err != nil {
+				fmt.Printf("%s✗ Error reading body: %v%s\n", Red, err, Reset)
+				continue
 			}
-
-		case startDownloadValue, ok := <-startDownloadChan:
-			if !ok {
-				fmt.Printf("%s✓ Start download channel closed, worker exiting%s\n", Cyan, Reset)
-				return
+			fileName := path.Base(fileNameInResponseUrl)
+			filePath := filepath.Join(downloadFolderAbsPath, fileName)
+			if err := os.WriteFile(filePath, []byte(body), 0644); err != nil {
+				fmt.Printf("%s✗ Error writing file %s: %v%s\n", Red, fileName, err, Reset)
+			} else {
+				counter++
+				counterChan <- counter
 			}
-			startDownload = startDownloadValue
 		}
 	}
+	fmt.Printf("%s✓ Response channel closed, worker exiting%s\n", Cyan, Reset)
 }
 
 // printCounterWorker listens to counter updates and displays the current count on a single line.
