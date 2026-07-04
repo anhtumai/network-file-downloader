@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -208,10 +209,29 @@ func main() {
 	// ========================================
 	// 1. Parse CLI Input
 	// ========================================
+
+	// Mandatory
 	url := flag.String("url", "", "URL to open in browser")
 	fileExtensionsStr := flag.String("file-extensions", "", "Comma-separated list of file extensions to download (e.g., .vtt,.srt,.mp4)")
-	configPath := flag.String("config", "", "Path to browser config file (.json, .yaml, or .yml)")
-	cookiePath := flag.String("cookie", "", "Path to cookie file")
+
+	// Optional
+	configFilePath := flag.String("config", "", "Path to browser config file (.json, .yaml, or .yml) (Optional)")
+	cookieFilePath := flag.String("cookie-file", "", "Path to cookie file (Optional)")
+	browserFlag := flag.String(
+		"browser",
+		"chromium",
+		"Browser to use (Optional). Possible values: firefox, chromium, webkit. Defaults to chromium.",
+	)
+
+	// Optional, to be entered later
+	withCookie := flag.Bool("with-cookie", false, "With this flag, the program will ask you to enter a cookie (Optional)")
+	downloadFolderPath := flag.String(
+		"download-folder",
+		"",
+		"Folder to download all the files to (Optional). "+
+			"If this param is missing the program with ask you to enter the path manually. "+
+			"The path can be both absolute or relative path.",
+	)
 
 	flag.Parse()
 
@@ -228,14 +248,22 @@ func main() {
 
 	// Load browser config
 	cfg := defaultBrowserConfig()
-	if *configPath != "" {
-		loaded, err := loadConfig(*configPath)
+	if *configFilePath != "" {
+		loaded, err := loadConfig(*configFilePath)
 		if err != nil {
 			log.Fatalf("could not load config: %v", err)
 		}
 		applyDefaults(&loaded, cfg)
 		cfg = loaded
-		fmt.Printf("%s✓ Loaded config from: %s%s\n", Green, *configPath, Reset)
+		fmt.Printf("%s✓ Loaded config from: %s%s\n", Green, *configFilePath, Reset)
+	}
+
+	switch *browserFlag {
+	case "firefox", "chromium", "webkit":
+		cfg.Browser = *browserFlag
+	default:
+		fmt.Printf("%s✗ Error: invalid --browser value %q (must be firefox, chromium, or webkit)%s\n", Red, *browserFlag, Reset)
+		log.Fatal("Usage: network-file-downloader --url <URL> --file-extensions <extensions> [--browser firefox|chromium|webkit]")
 	}
 
 	// Parse file extensions
@@ -309,19 +337,35 @@ func main() {
 	}
 	defer context.Close()
 
-	if *cookiePath != "" {
-		cookieContentBytes, err := os.ReadFile(*cookiePath)
+	if *cookieFilePath != "" {
+		if *withCookie {
+			fmt.Printf("%s⚠ Both --cookie-file and --with-cookie were provided; using the cookie from --cookie-file%s\n", Yellow, Reset)
+		}
+		cookieContentBytes, err := os.ReadFile(*cookieFilePath)
 		if err != nil {
 			log.Fatalf("could not read cookie file: %v", err)
 		}
 		cookieContent := string(cookieContentBytes)
 		optionalCookies := ParseCookie(cookieContent, *url)
-
 		err = context.AddCookies(optionalCookies)
 		if err != nil {
 			log.Fatalf("could not add cookie: %v", err)
 		}
+	}
 
+	if *cookieFilePath == "" && *withCookie {
+		fmt.Printf("%s%sPlease input your cookie:%s ", Bold, Yellow, Reset)
+		reader := bufio.NewReader(os.Stdin)
+		cookieContent, err := reader.ReadString('\n')
+		if err != nil {
+			log.Fatalf("could not read cookie input: %v", err)
+		}
+		cookieContent = strings.TrimSpace(cookieContent)
+		optionalCookies := ParseCookie(cookieContent, *url)
+		err = context.AddCookies(optionalCookies)
+		if err != nil {
+			log.Fatalf("could not add cookie: %v", err)
+		}
 	}
 
 	page, err := context.NewPage()
