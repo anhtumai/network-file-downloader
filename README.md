@@ -33,21 +33,25 @@ cd network-file-downloader
 go mod download
 
 # Build the binary
-go build -o network-file-downloader main.go
+go build -o network-file-downloader .
 ```
 
 ## Usage
 
 ```bash
-network-file-downloader --url <URL> --file-extensions <extensions> [--config <path>] [--cookie <path>]
+network-file-downloader --url <URL> --file-extensions <extensions> [flags]
 ```
 
 ### Options
 
 - `--url`: URL to open in browser (required)
 - `--file-extensions`: Comma-separated list of file extensions to download (required, e.g. `.vtt,.srt,.mp4`)
-- `--config`: Path to a browser config file (`.json`, `.yaml`, or `.yml`)
-- `--cookie`: Path to a cookie file (document.cookie format)
+- `--config`: Path to a browser config file (`.json`, `.yaml`, or `.yml`) (optional)
+- `--browser`: Browser to use: `firefox` (default), `chromium`, or `webkit` (optional). Cannot be combined with `--config`; set `browser` in the config file instead
+- `--cookie-file`: Path to a cookie file (document.cookie format) (optional)
+- `--with-cookie`: Prompt to enter a cookie interactively instead of using `--cookie-file` (optional)
+- `--confirm-record`: Wait for Enter to be pressed before starting to record, useful if you want to perform an action in the browser first (optional)
+- `--download-folder`: Folder to save downloaded files to, absolute or relative (optional). If omitted, you'll be prompted to enter it interactively
 
 ### Examples
 
@@ -66,9 +70,19 @@ Use a custom browser config:
 network-file-downloader --url https://example.com/video --file-extensions .vtt,.srt --config ./config.json
 ```
 
+Pick a browser without a config file:
+```bash
+network-file-downloader --url https://example.com/video --file-extensions .vtt,.srt --browser chromium
+```
+
 Use cookies for authenticated sessions:
 ```bash
-network-file-downloader --url https://example.com/video --file-extensions .vtt,.srt --cookie ./cookie.txt
+network-file-downloader --url https://example.com/video --file-extensions .vtt,.srt --cookie-file ./cookie.txt
+```
+
+Set the download folder up front and wait for a manual cue before recording:
+```bash
+network-file-downloader --url https://example.com/video --file-extensions .vtt --download-folder ./downloads --confirm-record
 ```
 
 ### Browser Config File
@@ -127,7 +141,7 @@ To access authenticated content, export your browser cookies as a `document.cook
 sessionId=abc123; authToken=xyz789; userId=42
 ```
 
-Then pass it with `--cookie ./cookie.txt`. Cookies are injected into the browser context before the page loads.
+Then pass it with `--cookie-file ./cookie.txt`. Cookies are injected into the browser context before the page loads. Alternatively, pass `--with-cookie` to be prompted for the cookie string interactively instead of using a file (note: very long cookies may be truncated by your terminal's paste buffer, so `--cookie-file` is more reliable).
 
 #### How to export cookies from your browser
 
@@ -156,14 +170,14 @@ Then pass it with `--cookie ./cookie.txt`. Cookies are injected into the browser
 
 ### Interactive Mode
 
-Once the browser opens:
+If certain options aren't passed as flags, the tool will prompt for them before opening the browser:
 
-1. The tool will prompt: **Start Recording (y/n):**
-2. Enter `y` or `yes` to begin
-3. Specify a folder path to save downloaded files
-4. The tool monitors network traffic and saves matching files
-5. Press **Enter** to stop recording
-6. Repeat or press **Ctrl+C** to exit
+1. If `--download-folder` is omitted, you'll be asked to enter the folder path to save downloaded files to (created automatically if it doesn't exist)
+2. If `--with-cookie` is set (and `--cookie-file` isn't), you'll be asked to paste your cookie string
+3. The browser then opens and navigates to `--url`
+4. If `--confirm-record` is set, the tool waits for **Enter** before it starts recording — useful if you want to perform an action (e.g. log in, start a video) first. Otherwise recording starts immediately
+5. The tool monitors network traffic and saves matching files, showing a live count of files downloaded
+6. Press **Ctrl+C** to stop recording and exit
 
 ## How It Works
 
@@ -177,7 +191,7 @@ This is particularly useful for:
 
 ## Requirements
 
-- Go 1.21 or higher (for building from source)
+- Go 1.25.6 or higher (for building from source, per `go.mod`)
 - Playwright browser (automatically installed with `go run` or `go build`)
 
 ## License
