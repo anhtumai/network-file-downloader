@@ -124,18 +124,19 @@ func run() error {
 	cookieFilePath := flag.String("cookie-file", "", "Path to cookie file (Optional)")
 	browserFlag := flag.String(
 		"browser",
-		"chromium",
-		"Browser to use (Optional). Possible values: firefox, chromium, webkit. Defaults to chromium.",
+		"",
+		"Browser to use (Optional). Possible values: firefox, chromium, webkit. "+
+			"Cannot be combined with --config; if omitted, defaults to firefox unless set via --config.",
 	)
 	confirmRecord := flag.Bool("confirm-record", false, "Confirm before recording the download. Useful if you want to record only after performing certain action in the browser (Optional)")
 
-	// Optional, to be entered later
+	// Prompted interactively if not provided via flag
 	withCookie := flag.Bool("with-cookie", false, "With this flag, the program will ask you to enter a cookie (Optional)")
 	downloadFolderPathFlag := flag.String(
 		"download-folder",
 		"",
 		"Folder to download all the files to (Optional). "+
-			"If this param is missing the program with ask you to enter the path manually. "+
+			"If this param is missing the program will ask you to enter the path manually. "+
 			"The path can be both absolute or relative path.",
 	)
 
