@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -126,7 +127,7 @@ func run() error {
 		"chromium",
 		"Browser to use (Optional). Possible values: firefox, chromium, webkit. Defaults to chromium.",
 	)
-	confirmRecord := flag.Bool("confirm-record", false, "Confimr before recording the download. Useful if you want to record only after performing certain action in the browser(Optional)")
+	confirmRecord := flag.Bool("confirm-record", false, "Confirm before recording the download. Useful if you want to record only after performing certain action in the browser (Optional)")
 
 	// Optional, to be entered later
 	withCookie := flag.Bool("with-cookie", false, "With this flag, the program will ask you to enter a cookie (Optional)")
@@ -143,12 +144,12 @@ func run() error {
 	// Validate required flags
 	if *url == "" {
 		fmt.Printf("%s✗ Error: --url flag is required%s\n", Red, Reset)
-		return fmt.Errorf("usage: network-file-downloader --url <URL> --file-extensions <extensions> [--config <path>] [--cookie <path>]")
+		return errors.New("usage: network-file-downloader --url <URL> --file-extensions <extensions> [--config <path>] [--cookie <path>]")
 	}
 
 	if *fileExtensionsStr == "" {
 		fmt.Printf("%s✗ Error: --file-extensions flag is required%s\n", Red, Reset)
-		return fmt.Errorf("usage: network-file-downloader --url <URL> --file-extensions <extensions> [--config <path>] [--cookie <path>]")
+		return errors.New("usage: network-file-downloader --url <URL> --file-extensions <extensions> [--config <path>] [--cookie <path>]")
 	}
 
 	// --config and --browser are mutually exclusive: when a config file is used,
@@ -161,18 +162,25 @@ func run() error {
 	})
 	if *configFilePath != "" && browserFlagSet {
 		fmt.Printf("%s✗ Error: --browser cannot be used together with --config; set \"browser\" in the config file instead%s\n", Red, Reset)
-		return fmt.Errorf("usage: network-file-downloader --url <URL> --file-extensions <extensions> [--config <path> | --browser firefox|chromium|webkit]")
+		return errors.New("usage: network-file-downloader --url <URL> --file-extensions <extensions> [--config <path> | --browser firefox|chromium|webkit]")
 	}
+
+	stdinReader := bufio.NewReader(os.Stdin)
 
 	// Ask user for input on optional parameter with empty value
 	downloadFolderPath := *downloadFolderPathFlag
 	if downloadFolderPath == "" {
 		fmt.Printf("%s%sInput folder path to download to (e.g., . for current directory):%s ", Bold, Yellow, Reset)
-		fmt.Scan(&downloadFolderPath)
+		line, err := stdinReader.ReadString('\n')
+		if err != nil {
+			fmt.Printf("%s✗ Error: could not read download folder path: %v%s\n", Red, err, Reset)
+			return err
+		}
+		downloadFolderPath = strings.TrimSpace(line)
 	}
 	if err := os.MkdirAll(downloadFolderPath, 0755); err != nil {
 		fmt.Printf("%s✗ Error: could not create download folder %q: %v%s\n", Red, downloadFolderPath, err, Reset)
-		return fmt.Errorf("usage: network-file-downloader --url <URL> --file-extensions <extensions> [--download-folder <path>]")
+		return errors.New("usage: network-file-downloader --url <URL> --file-extensions <extensions> [--download-folder <path>]")
 	}
 	downloadFolderAbsPath, err := filepath.Abs(downloadFolderPath)
 	if err != nil {
@@ -201,7 +209,7 @@ func run() error {
 	case "firefox", "chromium", "webkit":
 	default:
 		fmt.Printf("%s✗ Error: invalid browser value %q (must be firefox, chromium, or webkit)%s\n", Red, cfg.Browser, Reset)
-		return fmt.Errorf("usage: network-file-downloader --url <URL> --file-extensions <extensions> [--browser firefox|chromium|webkit]")
+		return errors.New("usage: network-file-downloader --url <URL> --file-extensions <extensions> [--browser firefox|chromium|webkit]")
 	}
 
 	// Parse file extensions, dropping empty entries (e.g. from a trailing/double
@@ -215,7 +223,7 @@ func run() error {
 	}
 	if len(fileExtensions) == 0 {
 		fmt.Printf("%s✗ Error: --file-extensions must contain at least one non-empty extension%s\n", Red, Reset)
-		return fmt.Errorf("usage: network-file-downloader --url <URL> --file-extensions <extensions>")
+		return errors.New("usage: network-file-downloader --url <URL> --file-extensions <extensions>")
 	}
 
 	// ========================================
@@ -315,8 +323,7 @@ func run() error {
 	if *cookieFilePath == "" && *withCookie {
 		fmt.Printf("%s%sPlease input your cookie:%s ", Bold, Yellow, Reset)
 		fmt.Printf("%s(if your cookie is very long, the terminal may truncate the paste; use --cookie-file instead)%s\n", Yellow, Reset)
-		reader := bufio.NewReader(os.Stdin)
-		cookieContent, err := reader.ReadString('\n')
+		cookieContent, err := stdinReader.ReadString('\n')
 		if err != nil {
 			fmt.Printf("%s✗ Error: could not read cookie input: %v%s\n", Red, err, Reset)
 			return err
@@ -371,7 +378,7 @@ func run() error {
 	// ========================================
 	if *confirmRecord {
 		fmt.Printf("%s%sPress Enter to confirm start recording...%s\n", Bold, Yellow, Reset)
-		fmt.Scanln()
+		stdinReader.ReadString('\n')
 	}
 
 	fmt.Printf("%s%s✓ Recording started!%s Saving files to: %s%s%s\n", Bold, Green, Reset, Cyan, downloadFolderAbsPath, Reset)
