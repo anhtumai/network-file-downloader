@@ -383,6 +383,7 @@ func run() error {
 
 	if *cookieFilePath == "" && *withCookie {
 		fmt.Printf("%s%sPlease input your cookie:%s ", Bold, Yellow, Reset)
+		fmt.Printf("%s(if your cookie is very long, the terminal may truncate the paste; use --cookie-file instead)%s\n", Yellow, Reset)
 		reader := bufio.NewReader(os.Stdin)
 		cookieContent, err := reader.ReadString('\n')
 		if err != nil {
